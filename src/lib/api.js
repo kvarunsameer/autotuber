@@ -1,84 +1,87 @@
-// ── Claude AI ─────────────────────────────────────────────────────────────────
+// ── AI provider: Gemini (free) → Claude (fallback) ────────────────────────────
+// Priority: VITE_GEMINI_API_KEY → VITE_CLAUDE_API_KEY → user-supplied key
+
+const GEMINI_URL = (key) =>
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`;
+
+async function callAI(prompt, maxTokens = 1400, userKey = null) {
+  // Pick provider: Gemini key takes priority (it's free)
+  const geminiKey = import.meta.env.VITE_GEMINI_API_KEY?.startsWith('AIza')
+    ? import.meta.env.VITE_GEMINI_API_KEY
+    : (userKey?.startsWith('AIza') ? userKey : null);
+
+  const claudeKey = !geminiKey
+    ? (import.meta.env.VITE_CLAUDE_API_KEY?.startsWith('sk-ant') ? import.meta.env.VITE_CLAUDE_API_KEY
+      : userKey?.startsWith('sk-ant') ? userKey : null)
+    : null;
+
+  // ── Gemini ───────────────────────────────────────────────────────────────────
+  if (geminiKey) {
+    const r = await fetch(GEMINI_URL(geminiKey), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: maxTokens, temperature: 0.8 },
+      }),
+    });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      throw new Error(e?.error?.message || `Gemini error ${r.status}`);
+    }
+    const d = await r.json();
+    return d.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
+  }
+
+  // ── Claude fallback ───────────────────────────────────────────────────────────
+  if (claudeKey) {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': claudeKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: 'claude-opus-4-5',
+        max_tokens: maxTokens,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      throw new Error(e?.error?.message || `Claude error ${r.status}`);
+    }
+    const d = await r.json();
+    return d.content?.map(b => b.text || '').join('') || '';
+  }
+
+  throw new Error('No AI key configured. Add VITE_GEMINI_API_KEY (free at aistudio.google.com) to your .env');
+}
 
 export async function claudeScriptIdeas(niche, apiKey) {
-  const headers = {
-    'Content-Type': 'application/json',
-    'anthropic-dangerous-direct-browser-access': 'true',
-  };
-  if (apiKey) headers['x-api-key'] = apiKey;
-
-  const r = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      model: 'claude-opus-4-5',
-      max_tokens: 1400,
-      messages: [{
-        role: 'user',
-        content: `Expert YouTube strategist for faceless voiceover channels.\n\nGenerate 6 viral video ideas for: "${niche}"\n\nJSON array only, no markdown:\n[{"id":1,"title":"Title max 70 chars","hook":"5-second opening hook","description":"2 sentences","duration":"X min","views_potential":"High","tags":["tag1","tag2","tag3"],"thumbnail_text":"3-5 CAPS WORDS"}]\n\nviews_potential: "Medium"|"High"|"Very High"`,
-      }],
-    }),
-  });
-  if (!r.ok) {
-    const e = await r.json().catch(() => ({}));
-    throw new Error(e?.error?.message || `Claude error ${r.status}`);
-  }
-  const d = await r.json();
-  const raw = (d.content?.map(b => b.text || '').join('') || '')
-    .replace(/```json|```/g, '').trim();
-  return JSON.parse(raw);
+  const raw = await callAI(
+    `Expert YouTube strategist for faceless voiceover channels.\n\nGenerate 6 viral video ideas for: "${niche}"\n\nJSON array only, no markdown:\n[{"id":1,"title":"Title max 70 chars","hook":"5-second opening hook","description":"2 sentences","duration":"X min","views_potential":"High","tags":["tag1","tag2","tag3"],"thumbnail_text":"3-5 CAPS WORDS"}]\n\nviews_potential: "Medium"|"High"|"Very High"`,
+    1400, apiKey,
+  );
+  return JSON.parse(raw.replace(/```json|```/g, '').trim());
 }
 
 export async function claudeGenerateScript(title, hook, niche, apiKey) {
-  const headers = {
-    'Content-Type': 'application/json',
-    'anthropic-dangerous-direct-browser-access': 'true',
-  };
-  if (apiKey) headers['x-api-key'] = apiKey;
-
-  const r = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      model: 'claude-opus-4-5',
-      max_tokens: 1400,
-      messages: [{
-        role: 'user',
-        content: `Write a complete voiceover YouTube script.\nTitle: "${title}"\nNiche: ${niche}\nHook: "${hook}"\n\nSections: [HOOK] [INTRO] [SECTION 1] [SECTION 2] [SECTION 3] [SECTION 4] [OUTRO + CTA]\nConversational, 700-900 words, no camera directions.`,
-      }],
-    }),
-  });
-  if (!r.ok) {
-    const e = await r.json().catch(() => ({}));
-    throw new Error(e?.error?.message || `Claude error ${r.status}`);
-  }
-  const d = await r.json();
-  return d.content?.map(b => b.text || '').join('') || '';
+  return callAI(
+    `Write a complete voiceover YouTube script.\nTitle: "${title}"\nNiche: ${niche}\nHook: "${hook}"\n\nSections: [HOOK] [INTRO] [SECTION 1] [SECTION 2] [SECTION 3] [SECTION 4] [OUTRO + CTA]\nConversational, 700-900 words, no camera directions.`,
+    1400, apiKey,
+  );
 }
 
 export async function claudeThumbnailOptions(title, niche, apiKey) {
-  const headers = {
-    'Content-Type': 'application/json',
-    'anthropic-dangerous-direct-browser-access': 'true',
-  };
-  if (apiKey) headers['x-api-key'] = apiKey;
-
-  const r = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      model: 'claude-opus-4-5',
-      max_tokens: 120,
-      messages: [{
-        role: 'user',
-        content: `3 thumbnail text options for "${niche}" video: "${title}"\nEach: 3-5 CAPITALIZED words that create curiosity.\nJSON array only: ["OPT 1","OPT 2","OPT 3"]`,
-      }],
-    }),
-  });
-  if (!r.ok) return [`${title.slice(0, 30).toUpperCase()}`, 'WATCH THIS NOW', 'SHOCKING TRUTH'];
-  const d = await r.json();
   try {
-    return JSON.parse(d.content?.map(b => b.text || '').join('').replace(/```json|```/g, '').trim());
+    const raw = await callAI(
+      `3 thumbnail text options for "${niche}" video: "${title}"\nEach: 3-5 CAPITALIZED words that create curiosity.\nJSON array only: ["OPT 1","OPT 2","OPT 3"]`,
+      120, apiKey,
+    );
+    return JSON.parse(raw.replace(/```json|```/g, '').trim());
   } catch {
     return [`${title.slice(0, 30).toUpperCase()}`, 'WATCH THIS NOW', 'SHOCKING TRUTH'];
   }
