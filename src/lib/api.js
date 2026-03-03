@@ -438,19 +438,45 @@ function loadImage(url) {
   });
 }
 
-// Fetch AI-generated background images from Pollinations.ai (free, no key)
+// Niche → Picsum seed IDs that produce relevant-looking photos
+// picsum.photos uses a numeric seed for reproducible images
+const NICHE_SEEDS = {
+  tech:      [0, 1, 2, 3],
+  gaming:    [4, 5, 6, 7],
+  finance:   [80, 81, 82, 83],
+  business:  [84, 85, 86, 87],
+  travel:    [10, 11, 12, 13],
+  fitness:   [20, 21, 22, 23],
+  health:    [24, 25, 26, 27],
+  cooking:   [30, 31, 32, 33],
+  beauty:    [40, 41, 42, 43],
+  fashion:   [44, 45, 46, 47],
+  nature:    [50, 51, 52, 53],
+  science:   [60, 61, 62, 63],
+  history:   [70, 71, 72, 73],
+  mystery:   [90, 91, 92, 93],
+  lifestyle: [100, 101, 102, 103],
+};
+
+function getNicheSeeds(niche = '') {
+  const n = niche.toLowerCase();
+  for (const [key, seeds] of Object.entries(NICHE_SEEDS)) {
+    if (n.includes(key)) return seeds;
+  }
+  // default: a varied set of cinematic-looking photos
+  return [110, 111, 112, 113];
+}
+
+// Fetch background images from Picsum (free, CORS-enabled, no API key/token)
 async function fetchAIImages(niche, title, W, H) {
-  const prompts = [
-    `cinematic ${niche} scene, dramatic lighting, 4K, professional photography, no text, no watermark`,
-    `${niche} aerial landscape, stunning scenery, golden hour, cinematic, highly detailed`,
-    `${title} concept art, dramatic, visually striking, no text, photorealistic`,
-    `${niche} close-up detail, macro photography, beautiful, artistic, no text`,
-  ];
-  // Use turbo model — faster and more reliable than flux at large sizes
-  const urls = prompts.map((p, i) =>
-    `https://image.pollinations.ai/prompt/${encodeURIComponent(p)}?width=${Math.min(W, 768)}&height=${Math.min(H, 1024)}&nologo=true&model=turbo&seed=${i + 42}&enhance=false`
+  const seeds = getNicheSeeds(niche);
+  // Cap fetch size to 800px on larger axis for speed; canvas scales to fit
+  const fetchW = W >= H ? 800 : Math.round(800 * W / H);
+  const fetchH = W >= H ? Math.round(800 * H / W) : 800;
+
+  const urls = seeds.map(seed =>
+    `https://picsum.photos/seed/${seed}/${fetchW}/${fetchH}`
   );
-  // Load all in parallel, keep whichever succeed
   const images = await Promise.all(urls.map(loadImage));
   return images.filter(Boolean);
 }

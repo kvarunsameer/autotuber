@@ -635,7 +635,7 @@ export default function Editor() {
                     AI backgrounds · Ken Burns · 30 FPS · AI music matched to niche
                   </p>
                   <p style={{ color: T.textDim, fontFamily: T.mono, fontSize: 11, marginBottom: 20 }}>
-                    Fetching AI images + generating music takes ~15s before render starts
+                    Loading background images + generating music before render starts
                   </p>
                   <Btn size="lg" onClick={handleRender}>▶ START RENDER</Btn>
                 </div>
