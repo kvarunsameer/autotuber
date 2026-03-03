@@ -218,12 +218,12 @@ export default function Editor() {
     let audioBlob = null;
     let musicBlob = null;
 
-    // Generate voice if ElevenLabs key available
-    if (user?.services?.elKey && fullScript) {
+    // Generate voice — tries ElevenLabs first, auto-falls back to HuggingFace TTS (free)
+    if (fullScript) {
       try {
-        const { blob } = await generateVoice(fullScript, voiceId, user.services.elKey);
+        const { blob } = await generateVoice(fullScript, voiceId, user?.services?.elKey || null);
         audioBlob = blob;
-      } catch { /* skip voice */ }
+      } catch (e) { console.warn('Voice generation skipped:', e.message); /* render without voice */ }
     }
 
     // Generate AI background music based on niche (always runs, no API key needed)

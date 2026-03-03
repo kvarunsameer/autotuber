@@ -120,33 +120,64 @@ export async function testElevenLabsKey(apiKey) {
   return await r.json();
 }
 
-export async function generateVoice(text, voiceId, apiKey) {
-  if (!apiKey || apiKey === '...' || apiKey.length < 10) {
-    throw new Error('No ElevenLabs API key. Add your key in Settings → Services.');
-  }
-  const truncated = text.length > 2500 ? text.slice(0, 2500) + '...' : text;
-  // Build headers without sending undefined values
-  const headers = {
-    'Content-Type': 'application/json',
-    'xi-api-key': apiKey,
-    'Accept': 'audio/mpeg',
-  };
-  const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      text: truncated,
-      model_id: 'eleven_multilingual_v2',
-      voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.3, use_speaker_boost: true },
-    }),
-  });
+// ── HuggingFace TTS (free fallback — no billing required) ────────────────────
+// Get free key: https://huggingface.co/settings/tokens
+async function hfTTS(text) {
+  const hfKey = import.meta.env.VITE_HF_API_KEY;
+  const truncated = text.length > 1000 ? text.slice(0, 1000) : text;
+  const r = await fetch(
+    'https://api-inference.huggingface.co/models/facebook/mms-tts-eng',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(hfKey ? { Authorization: `Bearer ${hfKey}` } : {}),
+      },
+      body: JSON.stringify({ inputs: truncated }),
+    }
+  );
   if (!r.ok) {
     const e = await r.json().catch(() => ({}));
-    const msg = typeof e?.detail === 'string' ? e.detail : (e?.detail?.message || JSON.stringify(e?.detail) || `ElevenLabs error ${r.status}`);
-    throw new Error(msg);
+    throw new Error(e?.error || `HuggingFace TTS error ${r.status}`);
   }
   const blob = await r.blob();
   return { url: URL.createObjectURL(blob), blob };
+}
+
+export async function generateVoice(text, voiceId, apiKey) {
+  // ── Try ElevenLabs first if key is provided ───────────────────────────────
+  if (apiKey && apiKey.length > 10 && apiKey !== '...') {
+    const truncated = text.length > 2500 ? text.slice(0, 2500) + '...' : text;
+    const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'xi-api-key': apiKey,
+        'Accept': 'audio/mpeg',
+      },
+      body: JSON.stringify({
+        text: truncated,
+        model_id: 'eleven_multilingual_v2',
+        voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.3, use_speaker_boost: true },
+      }),
+    });
+    if (r.ok) {
+      const blob = await r.blob();
+      return { url: URL.createObjectURL(blob), blob };
+    }
+    const e = await r.json().catch(() => ({}));
+    const isQuota = e?.detail?.status === 'quota_exceeded' || r.status === 429;
+    if (!isQuota) {
+      // Hard error (bad key, wrong voice ID, etc.) — throw so user sees it
+      const msg = typeof e?.detail === 'string' ? e.detail : (e?.detail?.message || `ElevenLabs error ${r.status}`);
+      throw new Error(msg);
+    }
+    // Quota exceeded → fall through to HuggingFace
+    console.warn('ElevenLabs quota exceeded, falling back to HuggingFace TTS (free)');
+  }
+
+  // ── HuggingFace TTS fallback (free, no billing) ───────────────────────────
+  return hfTTS(text);
 }
 
 // ── YouTube OAuth ─────────────────────────────────────────────────────────────
