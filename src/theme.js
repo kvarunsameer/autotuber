@@ -115,8 +115,8 @@ export const VOICES = [
 ];
 
 export const VIDEO_STYLES = [
-  { id: 'gradient', label: 'Gradient Cinematic', desc: 'Bold text on animated gradient' },
-  { id: 'neon', label: 'Neon Glow', desc: 'Glowing neon text effects' },
-  { id: 'particles', label: 'Particle Flow', desc: 'Animated particles + text' },
-  { id: 'minimal', label: 'Clean Minimal', desc: 'Black BG, white typography' },
+  { id: 'cinematic',  label: 'Cinematic',     desc: 'Real-world scenes · dramatic text fade-in' },
+  { id: 'typewriter', label: 'Typewriter',    desc: 'Text types on screen word-by-word' },
+  { id: 'slideup',    label: 'Slide Up',      desc: 'Words animate up from bottom' },
+  { id: 'news',       label: 'Breaking News', desc: 'Bold lower-thirds · ticker bar' },
 ];

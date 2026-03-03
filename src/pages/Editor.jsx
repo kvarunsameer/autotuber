@@ -90,7 +90,7 @@ export default function Editor() {
   const [thumbOptions, setThumbOptions] = useState([]);
   const [selectedThumb, setSelectedThumb] = useState('');
 
-  const [videoStyle, setVideoStyle] = useState('gradient');
+  const [videoStyle, setVideoStyle] = useState('cinematic');
   const [voiceId, setVoiceId] = useState(VOICES[0].id);
   const [platforms, setPlatforms] = useState([]);
   const [renderPlatform, setRenderPlatform] = useState('shorts');
@@ -98,9 +98,13 @@ export default function Editor() {
   const [autoPublishIG, setAutoPublishIG] = useState(false);
 
   const [renderProgress, setRenderProgress] = useState(0);
-  const [renderStatus, setRenderStatus] = useState('idle'); // idle | running | done | error
+  const [renderStatus, setRenderStatus] = useState('idle');
   const [renderBlob, setRenderBlob] = useState(null);
   const [renderUrl, setRenderUrl] = useState(null);
+  const videoRef = useRef(null);
+  const [vidPlaying, setVidPlaying] = useState(false);
+  const [vidTime, setVidTime] = useState(0);
+  const [vidDuration, setVidDuration] = useState(0);
 
   const [publishStatus, setPublishStatus] = useState({});
   const [publishing, setPublishing] = useState(false);
@@ -115,7 +119,7 @@ export default function Editor() {
         if (found.status === 'published') { navigate('/published'); return; }
         setVideo(found);
         setFullScript(found.fullScript || '');
-        setVideoStyle(found.videoStyle || 'gradient');
+        setVideoStyle(found.videoStyle || 'cinematic');
         setVoiceId(found.voiceId || VOICES[0].id);
         if (found.fullScript) setStep('style');
         else if (found.title) setStep('script');
@@ -658,7 +662,47 @@ export default function Editor() {
               {renderStatus === 'done' && renderUrl && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                   <StatusBox type="ok" text={`Video rendered! ${renderPlatform === 'youtube' ? '1920×1080 (YouTube)' : renderPlatform === 'instagram' ? '1080×1080 (Instagram)' : '1080×1920 (Shorts/Reels)'} · WebM`} />
-                  <video src={renderUrl} controls style={{ width: '100%', maxHeight: 360, borderRadius: 10, background: '#000' }} />
+
+                  {/* Custom video player with working seekbar */}
+                  <div style={{ position: 'relative', background: '#000', borderRadius: 10, overflow: 'hidden' }}>
+                    <video
+                      ref={videoRef}
+                      src={renderUrl}
+                      style={{ width: '100%', maxHeight: 360, display: 'block' }}
+                      onTimeUpdate={() => setVidTime(videoRef.current?.currentTime || 0)}
+                      onDurationChange={() => setVidDuration(videoRef.current?.duration || 0)}
+                      onLoadedMetadata={() => setVidDuration(videoRef.current?.duration || 0)}
+                      onPlay={() => setVidPlaying(true)}
+                      onPause={() => setVidPlaying(false)}
+                      onEnded={() => setVidPlaying(false)}
+                    />
+                    {/* Custom controls */}
+                    <div style={{ background: 'rgba(0,0,0,0.75)', padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {/* Seekbar */}
+                      <input
+                        type="range" min={0} max={vidDuration || 100}
+                        value={vidTime}
+                        step={0.1}
+                        onChange={e => {
+                          const t = parseFloat(e.target.value);
+                          if (videoRef.current) videoRef.current.currentTime = t;
+                          setVidTime(t);
+                        }}
+                        style={{ width: '100%', accentColor: T.orange, cursor: 'pointer', height: 4 }}
+                      />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <button onClick={() => vidPlaying ? videoRef.current?.pause() : videoRef.current?.play()}
+                          style={{ background: T.orange, border: 'none', borderRadius: 6, padding: '5px 14px', color: '#fff', cursor: 'pointer', fontFamily: T.mono, fontSize: 13, fontWeight: 700 }}>
+                          {vidPlaying ? '⏸' : '▶'}
+                        </button>
+                        <span style={{ color: T.textMid, fontFamily: T.mono, fontSize: 11 }}>
+                          {Math.floor(vidTime / 60)}:{String(Math.floor(vidTime % 60)).padStart(2, '0')}
+                          {' / '}
+                          {isFinite(vidDuration) ? `${Math.floor(vidDuration / 60)}:${String(Math.floor(vidDuration % 60)).padStart(2, '0')}` : '--:--'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                   <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between' }}>
                     <Btn variant="secondary" onClick={handleDownload}>⬇ Download Video</Btn>
                     <Btn size="lg" onClick={() => setConfirmPublish(true)}>

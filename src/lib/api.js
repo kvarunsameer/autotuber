@@ -93,7 +93,7 @@ export async function claudeScriptIdeas(niche, apiKey) {
 
 export async function claudeGenerateScript(title, hook, niche, apiKey) {
   return callAI(
-    `Write a complete voiceover YouTube script.\nTitle: "${title}"\nNiche: ${niche}\nHook: "${hook}"\n\nSections: [HOOK] [INTRO] [SECTION 1] [SECTION 2] [SECTION 3] [SECTION 4] [OUTRO + CTA]\nConversational, 700-900 words, no camera directions.`,
+    `Write a complete voiceover YouTube script for a FACELESS channel (no host, no presenter).\nTitle: "${title}"\nNiche: ${niche}\nHook: "${hook}"\n\nSections: [HOOK] [INTRO] [SECTION 1] [SECTION 2] [SECTION 3] [SECTION 4] [OUTRO + CTA]\nConversational, 700-900 words.\nSTRICT RULES:\n- NEVER say "my name is", "I'm your host", "welcome back", or introduce a person\n- No camera directions, no stage directions\n- Speak directly to the viewer as "you"\n- Start immediately with the hook line`,
     1400, apiKey,
   );
 }
@@ -438,24 +438,23 @@ function loadImage(url) {
   });
 }
 
-// Niche → Picsum seed IDs that produce relevant-looking photos
-// picsum.photos uses a numeric seed for reproducible images
+// Niche → Picsum seed IDs (curated ranges with people/activities)
 const NICHE_SEEDS = {
-  tech:      [0, 1, 2, 3],
-  gaming:    [4, 5, 6, 7],
-  finance:   [80, 81, 82, 83],
-  business:  [84, 85, 86, 87],
-  travel:    [10, 11, 12, 13],
-  fitness:   [20, 21, 22, 23],
-  health:    [24, 25, 26, 27],
-  cooking:   [30, 31, 32, 33],
-  beauty:    [40, 41, 42, 43],
-  fashion:   [44, 45, 46, 47],
-  nature:    [50, 51, 52, 53],
-  science:   [60, 61, 62, 63],
-  history:   [70, 71, 72, 73],
-  mystery:   [90, 91, 92, 93],
-  lifestyle: [100, 101, 102, 103],
+  tech:      [367, 442, 2, 3],
+  gaming:    [292, 325, 7, 450],
+  finance:   [260, 453, 454, 455],
+  business:  [453, 260, 366, 617],
+  travel:    [11, 12, 428, 430],
+  fitness:   [303, 304, 312, 490],
+  health:    [463, 490, 312, 26],
+  cooking:   [292, 493, 30, 312],
+  beauty:    [659, 815, 42, 317],
+  fashion:   [815, 660, 318, 44],
+  nature:    [50, 51, 429, 430],
+  science:   [60, 400, 367, 401],
+  history:   [120, 121, 346, 347],
+  mystery:   [200, 391, 247, 392],
+  lifestyle: [659, 312, 317, 100],
 };
 
 function getNicheSeeds(niche = '') {
@@ -463,17 +462,14 @@ function getNicheSeeds(niche = '') {
   for (const [key, seeds] of Object.entries(NICHE_SEEDS)) {
     if (n.includes(key)) return seeds;
   }
-  // default: a varied set of cinematic-looking photos
-  return [110, 111, 112, 113];
+  return [312, 367, 428, 453]; // default: mixed people/scenes
 }
 
 // Fetch background images from Picsum (free, CORS-enabled, no API key/token)
 async function fetchAIImages(niche, title, W, H) {
   const seeds = getNicheSeeds(niche);
-  // Cap fetch size to 800px on larger axis for speed; canvas scales to fit
   const fetchW = W >= H ? 800 : Math.round(800 * W / H);
   const fetchH = W >= H ? Math.round(800 * H / W) : 800;
-
   const urls = seeds.map(seed =>
     `https://picsum.photos/seed/${seed}/${fetchW}/${fetchH}`
   );
@@ -612,62 +608,145 @@ export async function renderVideoOnCanvas({ script, settings, audioBlob, musicBl
     }
   }
 
-  function drawNeonBorder() {
-    if (style !== 'neon') return;
-    const grd = ctx.createLinearGradient(0, 0, W, H);
-    grd.addColorStop(0, '#FF6B35'); grd.addColorStop(0.5, '#8B5CF6'); grd.addColorStop(1, '#06B6D4');
-    ctx.strokeStyle = grd; ctx.lineWidth = 8;
-    ctx.strokeRect(24, 24, W - 48, H - 48);
-  }
-
-  function drawBranding(elapsed) {
-    // Pill badge
-    ctx.fillStyle = accentColor + 'CC';
-    ctx.beginPath();
-    const pillW = 200, pillH = 44, pillX = W / 2 - pillW / 2, pillY = H * 0.10;
-    ctx.roundRect(pillX, pillY, pillW, pillH, 22);
-    ctx.fill();
-    ctx.font = `bold ${Math.round(H * 0.013)}px 'JetBrains Mono', monospace`;
-    ctx.fillStyle = '#fff'; ctx.textAlign = 'center';
-    ctx.fillText('AUTOTUBER', W / 2, pillY + pillH * 0.65);
+  function drawWatermark(elapsed) {
+    // Subtle floating semi-transparent watermark - no pill, no solid background
+    const alpha = 0.18 + 0.06 * Math.sin(elapsed * 0.4); // gentle pulse
+    const x = W * 0.5 + Math.sin(elapsed * 0.15) * W * 0.25; // drift side to side slowly
+    const y = H * 0.07 + Math.cos(elapsed * 0.1) * H * 0.015;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.font = `700 ${Math.round(18 * H / 1920)}px 'JetBrains Mono', monospace`;
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 8;
+    ctx.fillText('AUTOTUBER', x, y);
+    ctx.restore();
   }
 
   function drawTitle(elapsed, t) {
-    const lines = wrapText(title, W > H ? 30 : 22); // wider wrap for landscape
-    const yBase = H * (W > H ? 0.32 : 0.38);
-    lines.forEach((line, i) => {
-      const maxFontSize = W > H ? 90 : 110;
-      const fontSize = line.length > 18 ? maxFontSize * 0.82 : maxFontSize;
-      ctx.font = `900 ${Math.round(fontSize * (H / 1920))}px 'Bebas Neue', 'Arial Black', sans-serif`;
+    const lines = wrapText(title, W > H ? 30 : 20);
+    const yBase = H * (W > H ? 0.32 : 0.40);
+    const baseFontSize = W > H ? 80 : 108;
+
+    if (style === 'news') {
+      // Breaking news: accent bar + bold solid text, no fade
+      const barH = Math.round(8 * H / 1920);
+      ctx.fillStyle = '#CC0000';
+      ctx.fillRect(0, H * 0.27, W, barH);
+
+      const labelW = Math.round(260 * W / 1080), labelH = Math.round(52 * H / 1920);
+      const labelX = Math.round(30 * W / 1080), labelY = H * 0.28;
+      ctx.fillStyle = '#CC0000';
+      ctx.fillRect(labelX, labelY, labelW, labelH);
+      ctx.font = `900 ${Math.round(22 * H / 1920)}px 'JetBrains Mono', monospace`;
+      ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.shadowBlur = 0;
+      ctx.fillText('BREAKING NEWS', labelX + 12, labelY + labelH * 0.68);
+
+      lines.forEach((line, i) => {
+        const fs = line.length > 20 ? baseFontSize * 0.78 : baseFontSize;
+        ctx.font = `900 ${Math.round(fs * H / 1920)}px 'Arial Black', sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#ffffff';
+        ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 6; ctx.shadowOffsetY = 3;
+        ctx.globalAlpha = Math.min(1, elapsed * 3);
+        ctx.fillText(line.toUpperCase(), W / 2, yBase + i * Math.round(118 * H / 1920) + Math.round(60 * H / 1920));
+        ctx.globalAlpha = 1; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+      });
+      return;
+    }
+
+    if (style === 'typewriter') {
+      // Typewriter: reveal characters over time
+      const fullText = lines.join(' ');
+      const charsToShow = Math.floor(elapsed * 12); // ~12 chars/sec
+      const displayText = fullText.slice(0, charsToShow);
+      const displayLines = wrapText(displayText || ' ', W > H ? 30 : 20);
+
+      const fs = Math.round((baseFontSize * 0.75) * H / 1920);
+      ctx.font = `700 ${fs}px 'JetBrains Mono', monospace`;
       ctx.textAlign = 'center';
-
-      // Text shadow for depth
-      ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 18; ctx.shadowOffsetY = 4;
-
-      const alpha = Math.min(1, elapsed * 2 - i * 0.4);
-      ctx.globalAlpha = Math.max(0, alpha);
-
-      if (style === 'neon') {
-        ctx.fillStyle = '#00E5A0'; ctx.shadowColor = '#00E5A0'; ctx.shadowBlur = 28;
-      } else {
-        ctx.fillStyle = '#fff';
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 12; ctx.shadowOffsetY = 3;
+      displayLines.forEach((line, i) => {
+        ctx.fillText(line, W / 2, yBase + i * Math.round(fs * 1.5));
+      });
+      // Blinking cursor
+      if (Math.floor(elapsed * 2) % 2 === 0) {
+        const lastLine = displayLines[displayLines.length - 1] || '';
+        const lineW = ctx.measureText(lastLine).width;
+        ctx.fillRect(W / 2 + lineW / 2 + 4, yBase + (displayLines.length - 1) * Math.round(fs * 1.5) - fs + 4, 3, fs);
       }
-      ctx.fillText(line.toUpperCase(), W / 2, yBase + i * Math.round(130 * H / 1920));
+      ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+      return;
+    }
+
+    if (style === 'slideup') {
+      // Each line slides up from off-screen with stagger
+      lines.forEach((line, i) => {
+        const delay = i * 0.55;
+        const progress = Math.max(0, Math.min(1, (elapsed - delay) * 2.2));
+        // ease-out cubic
+        const ease = 1 - Math.pow(1 - progress, 3);
+        const startY = H * 0.72;
+        const endY = yBase + i * Math.round(120 * H / 1920);
+        const currentY = startY + (endY - startY) * ease;
+
+        const fs = line.length > 18 ? baseFontSize * 0.82 : baseFontSize;
+        ctx.font = `900 ${Math.round(fs * H / 1920)}px 'Bebas Neue', 'Arial Black', sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#ffffff';
+        ctx.globalAlpha = ease;
+        ctx.shadowColor = 'rgba(0,0,0,0.85)'; ctx.shadowBlur = 16; ctx.shadowOffsetY = 4;
+        ctx.fillText(line.toUpperCase(), W / 2, currentY);
+        ctx.globalAlpha = 1; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+      });
+      return;
+    }
+
+    // Default: cinematic fade-in per line (original style, works great with photos)
+    lines.forEach((line, i) => {
+      const fs = line.length > 18 ? baseFontSize * 0.82 : baseFontSize;
+      ctx.font = `900 ${Math.round(fs * H / 1920)}px 'Bebas Neue', 'Arial Black', sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.shadowColor = 'rgba(0,0,0,0.85)'; ctx.shadowBlur = 20; ctx.shadowOffsetY = 5;
+      const alpha = Math.min(1, (elapsed - i * 0.45) * 2.2);
+      ctx.globalAlpha = Math.max(0, alpha);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(line.toUpperCase(), W / 2, yBase + i * Math.round(128 * H / 1920));
       ctx.globalAlpha = 1; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
     });
   }
 
   function drawHook(elapsed) {
     const hook = script?.hook || '';
-    if (!hook || elapsed < 1.5) return;
-    const hookAlpha = Math.min(1, (elapsed - 1.5) * 1.5);
+    if (!hook || elapsed < 1.8) return;
+    const hookAlpha = Math.min(1, (elapsed - 1.8) * 1.8);
+
+    if (style === 'news') {
+      // Ticker-style scrolling text at bottom
+      const tickerH = Math.round(52 * H / 1920);
+      const tickerY = H - tickerH - Math.round(70 * H / 1920);
+      ctx.fillStyle = '#CC0000';
+      ctx.fillRect(0, tickerY, W, tickerH);
+      const scrollX = W - ((elapsed - 1.8) * W * 0.5) % (W * 2);
+      ctx.font = `700 ${Math.round(24 * H / 1920)}px 'JetBrains Mono', monospace`;
+      ctx.fillStyle = '#fff'; ctx.textAlign = 'left';
+      ctx.save(); ctx.beginPath(); ctx.rect(0, tickerY, W, tickerH); ctx.clip();
+      ctx.fillText('▶  ' + hook.toUpperCase() + '   ▶   ' + hook.toUpperCase(), scrollX, tickerY + tickerH * 0.68);
+      ctx.restore();
+      return;
+    }
+
     ctx.globalAlpha = hookAlpha;
-    ctx.font = `500 ${Math.round(36 * H / 1920)}px -apple-system, 'Segoe UI', sans-serif`;
-    ctx.fillStyle = '#E0E0FF'; ctx.textAlign = 'center';
-    ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 14;
-    const hookLines = wrapText(hook, W > H ? 50 : 38);
+    const isSlideup = style === 'slideup';
+    const hookY = isSlideup ? H * 0.70 : H * (W > H ? 0.52 : 0.64);
+    ctx.font = `500 ${Math.round(34 * H / 1920)}px -apple-system, 'Segoe UI', sans-serif`;
+    ctx.fillStyle = style === 'typewriter' ? accentColor : '#E8E8FF';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 16;
+    const hookLines = wrapText(hook, W > H ? 50 : 36);
     hookLines.forEach((hl, i) => {
-      ctx.fillText(hl, W / 2, H * (W > H ? 0.52 : 0.62) + i * Math.round(48 * H / 1920));
+      ctx.fillText(hl, W / 2, hookY + i * Math.round(46 * H / 1920));
     });
     ctx.globalAlpha = 1; ctx.shadowBlur = 0;
   }
@@ -715,11 +794,10 @@ export async function renderVideoOnCanvas({ script, settings, audioBlob, musicBl
       const elapsed = frame / FPS;
 
       drawBackground(t);
-      drawNeonBorder();
-      drawBranding(elapsed);
       drawTitle(elapsed, t);
       drawHook(elapsed);
       drawCTA(t);
+      drawWatermark(elapsed);
 
       frame++;
       onProgress?.(12 + Math.round((frame / totalFrames) * 88));
