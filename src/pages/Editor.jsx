@@ -93,6 +93,7 @@ export default function Editor() {
   const [videoStyle, setVideoStyle] = useState('gradient');
   const [voiceId, setVoiceId] = useState(VOICES[0].id);
   const [platforms, setPlatforms] = useState([]);
+  const [renderPlatform, setRenderPlatform] = useState('shorts');
   const [autoPublishYT, setAutoPublishYT] = useState(false);
   const [autoPublishIG, setAutoPublishIG] = useState(false);
 
@@ -224,6 +225,7 @@ export default function Editor() {
         settings: { videoStyle },
         audioBlob,
         onProgress: setRenderProgress,
+        platform: renderPlatform,
       });
       setRenderBlob(blob);
       setRenderUrl(url);
@@ -591,12 +593,39 @@ export default function Editor() {
             </Card>
 
             <Card>
+              <SLabel icon="📐">OUTPUT FORMAT</SLabel>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, marginBottom: 4 }}>
+                {[
+                  { id: 'shorts',    label: 'YT Shorts',  icon: '📱', dims: '1080×1920', note: '9:16 · 45s' },
+                  { id: 'youtube',   label: 'YouTube',    icon: '🖥',  dims: '1920×1080', note: '16:9 · 60s' },
+                  { id: 'instagram', label: 'Instagram',  icon: '📷', dims: '1080×1080', note: '1:1 · 45s' },
+                  { id: 'reels',     label: 'IG Reels',   icon: '🎞',  dims: '1080×1920', note: '9:16 · 45s' },
+                ].map(p => (
+                  <button key={p.id} onClick={() => renderStatus !== 'running' && setRenderPlatform(p.id)} style={{
+                    background: renderPlatform === p.id ? T.orange + '18' : T.bg3,
+                    border: `1px solid ${renderPlatform === p.id ? T.orange + '80' : T.border}`,
+                    borderRadius: 10, padding: '10px 6px', cursor: renderStatus === 'running' ? 'not-allowed' : 'pointer',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+                  }}>
+                    <span style={{ fontSize: 20 }}>{p.icon}</span>
+                    <span style={{ color: renderPlatform === p.id ? T.orange : T.text, fontFamily: T.mono, fontSize: 10, fontWeight: 700 }}>{p.label}</span>
+                    <span style={{ color: T.textDim, fontFamily: T.mono, fontSize: 9 }}>{p.dims}</span>
+                    <span style={{ color: T.textDim, fontFamily: T.mono, fontSize: 9 }}>{p.note}</span>
+                  </button>
+                ))}
+              </div>
+            </Card>
+
+            <Card>
               <SLabel icon="🎬">RENDER ENGINE</SLabel>
               {renderStatus === 'idle' && (
                 <div style={{ textAlign: 'center', padding: '30px 0' }}>
                   <div style={{ fontSize: 40, marginBottom: 12 }}>🎬</div>
-                  <p style={{ color: T.textMid, fontFamily: T.mono, fontSize: 12, marginBottom: 20 }}>
-                    Renders 1080×1920 (9:16) · 30 FPS · 15 seconds
+                  <p style={{ color: T.textMid, fontFamily: T.mono, fontSize: 12, marginBottom: 6 }}>
+                    AI backgrounds via Pollinations · Ken Burns effect · 30 FPS
+                  </p>
+                  <p style={{ color: T.textDim, fontFamily: T.mono, fontSize: 11, marginBottom: 20 }}>
+                    Fetching AI images takes ~15s before render starts
                   </p>
                   <Btn size="lg" onClick={handleRender}>▶ START RENDER</Btn>
                 </div>
@@ -618,7 +647,7 @@ export default function Editor() {
               )}
               {renderStatus === 'done' && renderUrl && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                  <StatusBox type="ok" text="Video rendered successfully! 1080×1920 · WebM format" />
+                  <StatusBox type="ok" text={`Video rendered! ${renderPlatform === 'youtube' ? '1920×1080 (YouTube)' : renderPlatform === 'instagram' ? '1080×1080 (Instagram)' : '1080×1920 (Shorts/Reels)'} · WebM`} />
                   <video src={renderUrl} controls style={{ width: '100%', maxHeight: 360, borderRadius: 10, background: '#000' }} />
                   <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between' }}>
                     <Btn variant="secondary" onClick={handleDownload}>⬇ Download Video</Btn>
