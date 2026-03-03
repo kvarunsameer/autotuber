@@ -446,8 +446,9 @@ async function fetchAIImages(niche, title, W, H) {
     `${title} concept art, dramatic, visually striking, no text, photorealistic`,
     `${niche} close-up detail, macro photography, beautiful, artistic, no text`,
   ];
+  // Use turbo model — faster and more reliable than flux at large sizes
   const urls = prompts.map((p, i) =>
-    `https://image.pollinations.ai/prompt/${encodeURIComponent(p)}?width=${W}&height=${H}&nologo=true&model=flux&seed=${i + 42}`
+    `https://image.pollinations.ai/prompt/${encodeURIComponent(p)}?width=${Math.min(W, 768)}&height=${Math.min(H, 1024)}&nologo=true&model=turbo&seed=${i + 42}&enhance=false`
   );
   // Load all in parallel, keep whichever succeed
   const images = await Promise.all(urls.map(loadImage));
@@ -470,35 +471,39 @@ export async function renderVideoOnCanvas({ script, settings, audioBlob, musicBl
   const chunks = [];
   const stream = canvas.captureStream(FPS);
 
-  // ── Audio (voice + music mixed) ────────────────────────────────────────────
+  // ── Audio (voice + music mixed — silent during setup, starts with recorder) ─
+  let audioStartFn = null;
   if (audioBlob || musicBlob) {
     try {
       const audioCtx = new AudioContext();
       const dest = audioCtx.createMediaStreamDestination();
 
-      const loadAndPlay = async (blob, gainValue) => {
-        if (!blob) return;
+      const prepareSource = async (blob, gainValue) => {
+        if (!blob) return null;
         const buf = await blob.arrayBuffer();
         const decoded = await audioCtx.decodeAudioData(buf);
         const source = audioCtx.createBufferSource();
         source.buffer = decoded;
-        // Loop music if shorter than video duration
-        source.loop = (blob === musicBlob);
+        source.loop = (blob === musicBlob); // loop music to fill video duration
         const gainNode = audioCtx.createGain();
         gainNode.gain.value = gainValue;
         source.connect(gainNode);
-        gainNode.connect(dest);
-        gainNode.connect(audioCtx.destination);
-        source.start();
+        gainNode.connect(dest); // → MediaStream only, NOT audioCtx.destination (no speaker output)
+        return source;
       };
 
-      // Voice at full volume, music at 20%
-      await Promise.all([
-        loadAndPlay(audioBlob, 1.0),
-        loadAndPlay(musicBlob, 0.20),
+      const [voiceSrc, musicSrc] = await Promise.all([
+        prepareSource(audioBlob, 1.0),
+        prepareSource(musicBlob, 0.20),
       ]);
 
       dest.stream.getAudioTracks().forEach(t => stream.addTrack(t));
+
+      // Defer actual .start() until recorder begins so audio is in sync
+      audioStartFn = () => {
+        voiceSrc?.start(0);
+        musicSrc?.start(0);
+      };
     } catch { /* no audio */ }
   }
 
@@ -668,10 +673,16 @@ export async function renderVideoOnCanvas({ script, settings, audioBlob, musicBl
     };
 
     recorder.start(200);
+    audioStartFn?.(); // start audio exactly when recorder starts
 
     const totalFrames = FPS * DURATION;
+    const frameInterval = 1000 / FPS; // ~33ms per frame
     let frame = 0;
+    let startTime = performance.now();
 
+    // Use setTimeout instead of requestAnimationFrame:
+    // rAF gets throttled by the browser when the tab is busy/hidden,
+    // causing the recorded video to appear shortened (1-sec bug).
     function drawFrame() {
       if (frame >= totalFrames) { recorder.stop(); return; }
       const t = frame / totalFrames;
@@ -686,8 +697,12 @@ export async function renderVideoOnCanvas({ script, settings, audioBlob, musicBl
 
       frame++;
       onProgress?.(12 + Math.round((frame / totalFrames) * 88));
-      requestAnimationFrame(drawFrame);
+
+      // Schedule next frame at the correct wall-clock time to maintain real FPS
+      const nextFrameTime = startTime + frame * frameInterval;
+      const delay = Math.max(0, nextFrameTime - performance.now());
+      setTimeout(drawFrame, delay);
     }
-    requestAnimationFrame(drawFrame);
+    setTimeout(drawFrame, 0);
   });
 }
