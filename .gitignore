@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+server/node_modules/
+
+# Build output
+dist/
+
+# Environment variables — NEVER commit real keys
+.env
+.env.local
+.env.production
+
+# macOS
+.DS_Store
+
+# Vite
+*.local
+
+# Logs
+npm-debug.log*
