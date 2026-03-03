@@ -9,7 +9,7 @@ import {
 } from '../lib/db.js';
 import {
   claudeScriptIdeas, claudeGenerateScript, claudeThumbnailOptions,
-  generateVoice, renderVideoOnCanvas,
+  generateVoice, renderVideoOnCanvas, generateBackgroundMusic,
   ytUpload, fetchIGAccount,
 } from '../lib/api.js';
 import {
@@ -212,6 +212,8 @@ export default function Editor() {
     setRenderStatus('running');
     setRenderProgress(0);
     let audioBlob = null;
+    let musicBlob = null;
+
     // Generate voice if ElevenLabs key available
     if (user?.services?.elKey && fullScript) {
       try {
@@ -219,11 +221,19 @@ export default function Editor() {
         audioBlob = blob;
       } catch { /* skip voice */ }
     }
+
+    // Generate AI background music based on niche (always runs, no API key needed)
+    try {
+      const cfg = { shorts: 45, youtube: 60, instagram: 45, reels: 45 };
+      musicBlob = await generateBackgroundMusic(video?.niche || '', cfg[renderPlatform] || 45);
+    } catch { /* skip music */ }
+
     try {
       const { blob, url } = await renderVideoOnCanvas({
         script: video,
         settings: { videoStyle },
         audioBlob,
+        musicBlob,
         onProgress: setRenderProgress,
         platform: renderPlatform,
       });
@@ -622,10 +632,10 @@ export default function Editor() {
                 <div style={{ textAlign: 'center', padding: '30px 0' }}>
                   <div style={{ fontSize: 40, marginBottom: 12 }}>🎬</div>
                   <p style={{ color: T.textMid, fontFamily: T.mono, fontSize: 12, marginBottom: 6 }}>
-                    AI backgrounds via Pollinations · Ken Burns effect · 30 FPS
+                    AI backgrounds · Ken Burns · 30 FPS · AI music matched to niche
                   </p>
                   <p style={{ color: T.textDim, fontFamily: T.mono, fontSize: 11, marginBottom: 20 }}>
-                    Fetching AI images takes ~15s before render starts
+                    Fetching AI images + generating music takes ~15s before render starts
                   </p>
                   <Btn size="lg" onClick={handleRender}>▶ START RENDER</Btn>
                 </div>

@@ -224,6 +224,188 @@ export async function fetchIGAccount(token) {
 
 // ── Canvas renderer (AI backgrounds via Pollinations.ai + Ken Burns effect) ──
 
+// ── Background music generator (Web Audio API, no key needed) ────────────────
+// Maps niche/category to mood, generates a looping ambient track procedurally.
+
+const NICHE_MOOD = {
+  // upbeat major
+  cooking: { bpm: 96,  root: 261.63, minor: false, style: 'warm'       },
+  beauty:  { bpm: 100, root: 293.66, minor: false, style: 'warm'       },
+  fitness: { bpm: 128, root: 293.66, minor: false, style: 'energetic'  },
+  travel:  { bpm: 90,  root: 261.63, minor: false, style: 'cinematic'  },
+  lifestyle:{ bpm: 95, root: 246.94, minor: false, style: 'warm'       },
+  // neutral / corporate
+  finance: { bpm: 100, root: 220.00, minor: false, style: 'corporate'  },
+  business:{ bpm: 100, root: 220.00, minor: false, style: 'corporate'  },
+  // electronic / minor
+  tech:    { bpm: 120, root: 220.00, minor: true,  style: 'electronic' },
+  gaming:  { bpm: 140, root: 246.94, minor: true,  style: 'energetic'  },
+  crypto:  { bpm: 115, root: 220.00, minor: true,  style: 'electronic' },
+  // dark / dramatic
+  mystery: { bpm: 70,  root: 196.00, minor: true,  style: 'dark'       },
+  horror:  { bpm: 65,  root: 185.00, minor: true,  style: 'dark'       },
+  crime:   { bpm: 75,  root: 196.00, minor: true,  style: 'dark'       },
+  history: { bpm: 80,  root: 220.00, minor: true,  style: 'cinematic'  },
+  science: { bpm: 90,  root: 220.00, minor: false, style: 'cinematic'  },
+};
+
+function getNicheMood(niche = '') {
+  const n = niche.toLowerCase();
+  for (const [key, mood] of Object.entries(NICHE_MOOD)) {
+    if (n.includes(key)) return mood;
+  }
+  return { bpm: 90, root: 220.00, minor: false, style: 'cinematic' };
+}
+
+// Encode AudioBuffer → WAV Blob (PCM 16-bit)
+function audioBufferToWav(buffer) {
+  const numChannels = buffer.numberOfChannels;
+  const sampleRate = buffer.sampleRate;
+  const numSamples = buffer.length;
+  const byteRate = sampleRate * numChannels * 2;
+  const blockAlign = numChannels * 2;
+  const dataSize = numSamples * numChannels * 2;
+  const ab = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(ab);
+  const write = (off, str) => { for (let i = 0; i < str.length; i++) view.setUint8(off + i, str.charCodeAt(i)); };
+  write(0, 'RIFF'); view.setUint32(4, 36 + dataSize, true);
+  write(8, 'WAVE'); write(12, 'fmt ');
+  view.setUint32(16, 16, true); view.setUint16(20, 1, true);
+  view.setUint16(22, numChannels, true); view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true); view.setUint16(32, blockAlign, true);
+  view.setUint16(34, 16, true); write(36, 'data');
+  view.setUint32(40, dataSize, true);
+  let offset = 44;
+  for (let i = 0; i < numSamples; i++) {
+    for (let ch = 0; ch < numChannels; ch++) {
+      const sample = Math.max(-1, Math.min(1, buffer.getChannelData(ch)[i]));
+      view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+      offset += 2;
+    }
+  }
+  return new Blob([ab], { type: 'audio/wav' });
+}
+
+export async function generateBackgroundMusic(niche, duration = 45) {
+  const mood = getNicheMood(niche);
+  const SR = 44100;
+  const ctx = new OfflineAudioContext(2, SR * duration, SR);
+  const { bpm, root, minor, style } = mood;
+
+  // Master gain (background music should be subtle, ~18% volume)
+  const master = ctx.createGain();
+  master.gain.value = 0.18;
+  master.connect(ctx.destination);
+
+  // Chord intervals: major or minor triads + 7th
+  const intervals = minor
+    ? [0, 3, 7, 10]  // minor 7
+    : [0, 4, 7, 11]; // major 7
+
+  // 4-chord progression (all relative to root)
+  const chordRoots = minor
+    ? [root, root * 1.189, root * 1.335, root * 1.498]  // i → III → iv → VII
+    : [root, root * 1.122, root * 1.335, root * 1.498]; // I → II → IV → V
+
+  const beatDur = 60 / bpm;
+  const barDur = beatDur * 4;
+  const chordDur = barDur * 2; // 2 bars per chord
+  const totalBars = Math.ceil(duration / barDur);
+
+  // ── Pad layer (soft chords) ────────────────────────────────────────────────
+  for (let bar = 0; bar < totalBars; bar++) {
+    const t = bar * barDur;
+    const chordIdx = Math.floor(bar / 2) % chordRoots.length;
+    const chordRoot = chordRoots[chordIdx];
+
+    intervals.forEach((semitones, voiceIdx) => {
+      const freq = chordRoot * Math.pow(2, semitones / 12) * (voiceIdx > 1 ? 2 : 1);
+
+      // 2 oscillators slightly detuned for warmth
+      [-4, 4].forEach((detune) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = style === 'electronic' ? 'sawtooth' : 'sine';
+        osc.frequency.value = freq;
+        osc.detune.value = detune;
+
+        // Gentle low-pass
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = style === 'dark' ? 700 : 1800;
+        filter.Q.value = 0.8;
+
+        const attackT = 0.3, releaseT = 0.8;
+        const noteEnd = Math.min(t + chordDur, duration);
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(0.12, t + attackT);
+        gain.gain.setValueAtTime(0.12, noteEnd - releaseT);
+        gain.gain.linearRampToValueAtTime(0, noteEnd);
+
+        osc.connect(filter); filter.connect(gain); gain.connect(master);
+        osc.start(t); osc.stop(Math.min(noteEnd + 0.1, duration));
+      });
+    });
+  }
+
+  // ── Bass line ─────────────────────────────────────────────────────────────
+  for (let bar = 0; bar < totalBars; bar++) {
+    const t = bar * barDur;
+    const chordIdx = Math.floor(bar / 2) % chordRoots.length;
+    const bassFreq = chordRoots[chordIdx] / 2; // one octave down
+
+    // Bass hits on beat 1 and beat 3
+    [0, beatDur * 2].forEach((beatOffset) => {
+      const noteStart = t + beatOffset;
+      if (noteStart >= duration) return;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const filter = ctx.createBiquadFilter();
+
+      osc.type = 'sine';
+      osc.frequency.value = bassFreq;
+      filter.type = 'lowpass'; filter.frequency.value = 300;
+      gain.gain.setValueAtTime(0, noteStart);
+      gain.gain.linearRampToValueAtTime(0.35, noteStart + 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.001, noteStart + beatDur * 1.5);
+
+      osc.connect(filter); filter.connect(gain); gain.connect(master);
+      osc.start(noteStart); osc.stop(Math.min(noteStart + beatDur * 1.6, duration));
+    });
+  }
+
+  // ── Hi-hat / pulse (energetic & electronic styles only) ──────────────────
+  if (style === 'energetic' || style === 'electronic') {
+    for (let bar = 0; bar < totalBars; bar++) {
+      for (let beat = 0; beat < 8; beat++) {
+        const noteStart = bar * barDur + beat * beatDur * 0.5;
+        if (noteStart >= duration) break;
+        const buf = ctx.createBuffer(1, SR * 0.05, SR);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1);
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        const hpf = ctx.createBiquadFilter();
+        hpf.type = 'highpass'; hpf.frequency.value = 8000;
+        const hGain = ctx.createGain();
+        hGain.gain.setValueAtTime(0.04, noteStart);
+        hGain.gain.exponentialRampToValueAtTime(0.001, noteStart + 0.05);
+        src.connect(hpf); hpf.connect(hGain); hGain.connect(master);
+        src.start(noteStart); src.stop(noteStart + 0.06);
+      }
+    }
+  }
+
+  // ── Fade in / out ─────────────────────────────────────────────────────────
+  master.gain.setValueAtTime(0, 0);
+  master.gain.linearRampToValueAtTime(0.18, 2.0);
+  master.gain.setValueAtTime(0.18, duration - 3);
+  master.gain.linearRampToValueAtTime(0, duration);
+
+  const rendered = await ctx.startRendering();
+  return audioBufferToWav(rendered);
+}
+
 function wrapText(text, maxChars) {
   const words = text.split(' ');
   const lines = [];
@@ -272,7 +454,7 @@ async function fetchAIImages(niche, title, W, H) {
   return images.filter(Boolean);
 }
 
-export async function renderVideoOnCanvas({ script, settings, audioBlob, onProgress, platform = 'shorts' }) {
+export async function renderVideoOnCanvas({ script, settings, audioBlob, musicBlob, onProgress, platform = 'shorts' }) {
   const cfg = PLATFORM_CONFIG[platform] || PLATFORM_CONFIG.shorts;
   const { W, H } = cfg;
   const FPS = 30;
@@ -288,19 +470,35 @@ export async function renderVideoOnCanvas({ script, settings, audioBlob, onProgr
   const chunks = [];
   const stream = canvas.captureStream(FPS);
 
-  // ── Audio ──────────────────────────────────────────────────────────────────
-  if (audioBlob) {
+  // ── Audio (voice + music mixed) ────────────────────────────────────────────
+  if (audioBlob || musicBlob) {
     try {
       const audioCtx = new AudioContext();
-      const buf = await audioBlob.arrayBuffer();
-      const decoded = await audioCtx.decodeAudioData(buf);
-      const source = audioCtx.createBufferSource();
-      source.buffer = decoded;
       const dest = audioCtx.createMediaStreamDestination();
-      source.connect(dest);
-      source.connect(audioCtx.destination);
+
+      const loadAndPlay = async (blob, gainValue) => {
+        if (!blob) return;
+        const buf = await blob.arrayBuffer();
+        const decoded = await audioCtx.decodeAudioData(buf);
+        const source = audioCtx.createBufferSource();
+        source.buffer = decoded;
+        // Loop music if shorter than video duration
+        source.loop = (blob === musicBlob);
+        const gainNode = audioCtx.createGain();
+        gainNode.gain.value = gainValue;
+        source.connect(gainNode);
+        gainNode.connect(dest);
+        gainNode.connect(audioCtx.destination);
+        source.start();
+      };
+
+      // Voice at full volume, music at 20%
+      await Promise.all([
+        loadAndPlay(audioBlob, 1.0),
+        loadAndPlay(musicBlob, 0.20),
+      ]);
+
       dest.stream.getAudioTracks().forEach(t => stream.addTrack(t));
-      source.start();
     } catch { /* no audio */ }
   }
 
