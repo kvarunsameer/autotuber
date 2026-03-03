@@ -1,7 +1,13 @@
 // ── Design tokens ────────────────────────────────────────────────────────────
+// bg/text/border use CSS custom properties so they respond to theme switching.
+// Accent colours stay as hex — they're used with string concat for opacity.
 export const T = {
-  bg0: '#05050f', bg1: '#0a0a1a', bg2: '#0f0f24', bg3: '#14142e',
-  border: '#1a1a35', borderHi: '#2a2a50',
+  // ── Backgrounds / borders / text (theme-aware) ──────────────────────────
+  bg0: 'var(--bg0)', bg1: 'var(--bg1)', bg2: 'var(--bg2)', bg3: 'var(--bg3)',
+  bg0blur: 'var(--bg0blur)',
+  border: 'var(--border)', borderHi: 'var(--border-hi)',
+  text: 'var(--text)', textMid: 'var(--text-mid)', textDim: 'var(--text-dim)',
+  // ── Accent colours (fixed, used with hex concat for alpha variants) ──────
   orange: '#FF6B35', orangeDim: '#FF6B3520',
   green: '#00E5A0', greenDim: '#00E5A020',
   blue: '#4285F4', blueDim: '#4285F420',
@@ -10,7 +16,7 @@ export const T = {
   gold: '#F59E0B', goldDim: '#F59E0B20',
   red: '#EF4444', redDim: '#EF444420',
   cyan: '#06B6D4', cyanDim: '#06B6D420',
-  text: '#E0E0FF', textMid: '#7070A0', textDim: '#3a3a60',
+  // ── Typography ───────────────────────────────────────────────────────────
   mono: "'JetBrains Mono', 'Courier New', monospace",
   sans: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   display: "'Bebas Neue', 'Arial Black', sans-serif",

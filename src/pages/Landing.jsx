@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { T, PLANS, CATEGORIES } from '../theme.js';
+import { useApp } from '../context/AppContext.jsx';
 
 export default function Landing() {
   const navigate = useNavigate();
+  const { theme, toggleTheme } = useApp();
   const [hovered, setHovered] = useState(null);
 
   return (
@@ -12,12 +14,19 @@ export default function Landing() {
       <nav style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '18px 40px', borderBottom: `1px solid ${T.border}`,
-        position: 'sticky', top: 0, background: T.bg0 + 'f0', zIndex: 100, backdropFilter: 'blur(8px)',
+        position: 'sticky', top: 0, background: T.bg0blur, zIndex: 100, backdropFilter: 'blur(8px)',
       }}>
         <div style={{ fontFamily: T.display, fontSize: 28, letterSpacing: 3, color: T.orange }}>
           AUTOTUBER
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <button
+            onClick={toggleTheme}
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            style={{ background: 'none', border: `1px solid ${T.border}`, borderRadius: 8, padding: '8px 12px', color: T.textMid, fontFamily: T.mono, fontSize: 14, cursor: 'pointer' }}
+          >
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
           <button onClick={() => navigate('/auth?mode=login')}
             style={{ background: 'none', border: `1px solid ${T.border}`, borderRadius: 8, padding: '8px 18px', color: T.text, fontFamily: T.mono, fontSize: 12, cursor: 'pointer' }}>
             Sign In

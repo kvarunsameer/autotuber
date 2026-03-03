@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { T, PLANS } from '../theme.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useApp } from '../context/AppContext.jsx';
 
 const NAV = [
   { to: '/dashboard', icon: '🏠', label: 'Dashboard' },
@@ -13,6 +14,7 @@ const NAV = [
 
 export default function Sidebar({ collapsed, onToggle }) {
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useApp();
   const navigate = useNavigate();
   const plan = PLANS.find(p => p.id === user?.plan) || PLANS[0];
 
@@ -128,6 +130,22 @@ export default function Sidebar({ collapsed, onToggle }) {
         >
           <span style={{ fontSize: 16, flexShrink: 0 }}>🚪</span>
           {!collapsed && 'Logout'}
+        </button>
+
+        {/* Theme toggle */}
+        <button
+          onClick={toggleTheme}
+          title={collapsed ? (theme === 'dark' ? 'Light mode' : 'Dark mode') : undefined}
+          style={{
+            width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+            padding: collapsed ? '10px 16px' : '10px 12px',
+            background: 'none', border: 'none',
+            color: T.textMid, fontFamily: T.mono, fontSize: 12, cursor: 'pointer',
+            borderRadius: 9, transition: 'background 0.15s',
+          }}
+        >
+          <span style={{ fontSize: 16, flexShrink: 0 }}>{theme === 'dark' ? '☀️' : '🌙'}</span>
+          {!collapsed && <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>}
         </button>
       </div>
     </aside>

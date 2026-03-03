@@ -1,9 +1,20 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 
 const AppContext = createContext(null);
 
 export function AppProvider({ children }) {
   const [toasts, setToasts] = useState([]);
+  const [theme, setTheme] = useState(() => localStorage.getItem('at-theme') || 'dark');
+
+  // Apply theme to <html> element whenever it changes
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('at-theme', theme);
+  }, [theme]);
+
+  const toggleTheme = useCallback(() => {
+    setTheme(t => t === 'dark' ? 'light' : 'dark');
+  }, []);
 
   const toast = useCallback((message, type = 'info') => {
     const id = crypto.randomUUID();
@@ -16,7 +27,7 @@ export function AppProvider({ children }) {
   }, []);
 
   return (
-    <AppContext.Provider value={{ toast, toasts, dismissToast }}>
+    <AppContext.Provider value={{ toast, toasts, dismissToast, theme, toggleTheme }}>
       {children}
       {/* Global toast container */}
       <div className="toast-container">
