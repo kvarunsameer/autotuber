@@ -120,25 +120,18 @@ export async function testElevenLabsKey(apiKey) {
   return await r.json();
 }
 
-// ── HuggingFace TTS (free fallback — no billing required) ────────────────────
+// ── HuggingFace TTS (free fallback — proxied via local server to avoid CORS) ───────
 // Get free key: https://huggingface.co/settings/tokens
 async function hfTTS(text) {
-  const hfKey = import.meta.env.VITE_HF_API_KEY;
-  const truncated = text.length > 1000 ? text.slice(0, 1000) : text;
-  const r = await fetch(
-    'https://api-inference.huggingface.co/models/facebook/mms-tts-eng',
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(hfKey ? { Authorization: `Bearer ${hfKey}` } : {}),
-      },
-      body: JSON.stringify({ inputs: truncated }),
-    }
-  );
+  const serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
+  const r = await fetch(`${serverUrl}/api/tts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  });
   if (!r.ok) {
     const e = await r.json().catch(() => ({}));
-    throw new Error(e?.error || `HuggingFace TTS error ${r.status}`);
+    throw new Error(e?.error || `TTS proxy error ${r.status}`);
   }
   const blob = await r.blob();
   return { url: URL.createObjectURL(blob), blob };

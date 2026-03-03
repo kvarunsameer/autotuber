@@ -197,4 +197,36 @@ app.post('/api/webhook', async (req, res) => {
   res.json({ received: true });
 });
 
+// ── POST /api/tts ─────────────────────────────────────────────────────────────────────────────────
+// Proxies TTS to HuggingFace server-side to avoid browser CORS restrictions.
+// Body: { text: string }
+app.post('/api/tts', async (req, res) => {
+  try {
+    const { text } = req.body;
+    if (!text) return res.status(400).json({ error: 'text is required' });
+    const truncated = text.length > 1000 ? text.slice(0, 1000) : text;
+    const hfKey = process.env.VITE_HF_API_KEY;
+    const r = await fetch(
+      'https://api-inference.huggingface.co/models/facebook/mms-tts-eng',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(hfKey && hfKey !== 'hf_...' ? { Authorization: `Bearer ${hfKey}` } : {}),
+        },
+        body: JSON.stringify({ inputs: truncated }),
+      }
+    );
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      return res.status(r.status).json({ error: e?.error || `HuggingFace error ${r.status}` });
+    }
+    const audioBuffer = await r.arrayBuffer();
+    res.set('Content-Type', r.headers.get('content-type') || 'audio/flac');
+    res.send(Buffer.from(audioBuffer));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.listen(port, () => console.log(`AutoTuber server listening on port ${port}`));
