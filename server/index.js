@@ -5,6 +5,7 @@ import express from 'express';
 import cors from 'cors';
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
+import gTTS from 'node-gtts';
 
 // Load .env from project root regardless of where server is run from
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -198,32 +199,16 @@ app.post('/api/webhook', async (req, res) => {
 });
 
 // ── POST /api/tts ─────────────────────────────────────────────────────────────────────────────────
-// Proxies TTS to HuggingFace server-side to avoid browser CORS restrictions.
+// Free TTS proxy using node-gtts (Google Translate TTS, no API key required).
+// Streams MP3 audio directly back to the browser.
 // Body: { text: string }
-app.post('/api/tts', async (req, res) => {
+app.post('/api/tts', (req, res) => {
+  const { text } = req.body;
+  if (!text) return res.status(400).json({ error: 'text is required' });
   try {
-    const { text } = req.body;
-    if (!text) return res.status(400).json({ error: 'text is required' });
-    const truncated = text.length > 1000 ? text.slice(0, 1000) : text;
-    const hfKey = process.env.VITE_HF_API_KEY;
-    const r = await fetch(
-      'https://api-inference.huggingface.co/models/facebook/mms-tts-eng',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(hfKey && hfKey !== 'hf_...' ? { Authorization: `Bearer ${hfKey}` } : {}),
-        },
-        body: JSON.stringify({ inputs: truncated }),
-      }
-    );
-    if (!r.ok) {
-      const e = await r.json().catch(() => ({}));
-      return res.status(r.status).json({ error: e?.error || `HuggingFace error ${r.status}` });
-    }
-    const audioBuffer = await r.arrayBuffer();
-    res.set('Content-Type', r.headers.get('content-type') || 'audio/flac');
-    res.send(Buffer.from(audioBuffer));
+    const tts = gTTS('en');
+    res.set('Content-Type', 'audio/mpeg');
+    tts.stream(text).pipe(res);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
